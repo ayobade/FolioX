@@ -1,59 +1,71 @@
 import React from 'react'
+import styled from 'styled-components'
+import logo from '/Logoblack.png'
 
 function Header() {
     return (
-        <div style={styles.header}>
-            <div style={styles.logo}>
-                <h1 style={styles.logoText}>FolioX</h1>
-            </div>
-            
-            <div style={styles.searchContainer}>
-                <input 
-                    type="text" 
-                    placeholder="Search..." 
-                    style={styles.searchInput}
-                    onChange={(e) => console.log('Search:', e.target.value)}
-                />
-            </div>
-            
-        </div>
+        <HeaderBar>
+            <HeaderInner>
+                <Logo>
+                    <LogoImg src={logo} alt="logo" />
+                </Logo>
+                <Actions>
+                    <Button>Login</Button>
+                    <PrimaryButton>Sign up</PrimaryButton>
+                </Actions>
+            </HeaderInner>
+        </HeaderBar>
     )
 }
 
-const styles = {
-    header: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '15px 20px',
-        height: '60px',
-        boxSizing: 'border-box',
-        borderBottom: '1px solid #e0e0e0',
-        maxWidth: '1240px',
-        margin: '0 auto'
-    },
-    logo: {
-        textAlign: 'left'
-    },
-    logoText: {
-        fontSize: '32px',
-        fontWeight: 'bold',
-        color: '#333',
-        margin: 0
-    },
-    searchContainer: {
-        display: 'flex',
-        alignItems: 'center'
-    },
-    searchInput: {
-        padding: '8px 12px',
-        border: '1px solid #ddd',
-        borderRadius: '20px',
-        fontSize: '14px',
-        width: '200px',
-        outline: 'none',
-        backgroundColor: '#f9f9f9'
+const HeaderBar = styled.header`
+    width: 100%;
+    border-bottom: 1px solid #e0e0e0;
+`
+
+const HeaderInner = styled.div`
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 20px;
+    margin: 0 auto;
+    width: 1200px;
+
+    @media (max-width: 1200px) {
+        width: 100vw;
     }
-}
+`
+
+const Logo = styled.div`
+    text-align: left;
+`
+
+const LogoImg = styled.img`
+    height: 32px;
+    width: auto;
+    display: block;
+`
+
+const Actions = styled.div`
+    display: flex;
+    align-items: center;
+    gap: 10px;
+`
+
+const Button = styled.button`
+    padding: 8px 14px;
+    font-size: 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid #111827;
+    background-color: transparent;
+    color: #111827;
+`
+
+const PrimaryButton = styled(Button)`
+    background-color: #111827;
+    color: #ffffff;
+`
 
 export default Header
