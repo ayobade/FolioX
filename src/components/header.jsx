@@ -30,7 +30,7 @@ const HeaderInner = styled.div`
     justify-content: space-between;
     padding: 15px 20px;
     margin: 0 auto;
-    width: 1200px;
+    width: 80vw;
 
     @media (max-width: 1200px) {
         width: 100vw;
