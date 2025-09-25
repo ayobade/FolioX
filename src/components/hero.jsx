@@ -1,5 +1,6 @@
 import React from 'react'
 import styled from 'styled-components'
+import { Link } from 'react-router-dom'
 
 import bg from '/bg.png'
 
@@ -12,7 +13,7 @@ function Hero() {
                     Manage your crypto investments effortlessly with FolioX. real-time portfolio tracking, market insights, and performance charts all in one place
                 </Caption>
                 <Actions>
-                    <PrimaryButton>Join Now</PrimaryButton>
+                        <PrimaryButton><StyledLink to="/signup">Join Now</StyledLink></PrimaryButton>
                     <SecondaryButton>Learn More</SecondaryButton>
                 </Actions>
             </Container>
@@ -86,6 +87,11 @@ const SecondaryButton = styled(BaseButton)`
     background-color: rgba(255,255,255,0.9);
     border-color: #e5e7eb;
     color: #111827;
+`
+
+const StyledLink = styled(Link)`
+    text-decoration: none;
+    color: inherit;
 `
 
 export default Hero

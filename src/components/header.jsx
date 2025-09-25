@@ -1,6 +1,7 @@
 import React from 'react'
 import styled from 'styled-components'
 import logo from '/Logoblack.png'
+import { Link } from 'react-router-dom'
 
 function Header() {
     return (
@@ -10,8 +11,8 @@ function Header() {
                     <LogoImg src={logo} alt="logo" />
                 </Logo>
                 <Actions>
-                    <Button>Login</Button>
-                    <PrimaryButton>Sign up</PrimaryButton>
+                    <Button><StyledLink to="/login">Login</StyledLink></Button>
+                    <PrimaryButton><StyledLink to="/signup">Sign up</StyledLink></PrimaryButton>
                 </Actions>
             </HeaderInner>
         </HeaderBar>
@@ -54,6 +55,7 @@ const Actions = styled.div`
 `
 
 const Button = styled.button`
+    text-decoration: none;
     padding: 8px 14px;
     font-size: 14px;
     border-radius: 8px;
@@ -64,8 +66,14 @@ const Button = styled.button`
 `
 
 const PrimaryButton = styled(Button)`
+    text-decoration: none;
     background-color: #111827;
     color: #ffffff;
+`
+
+const StyledLink = styled(Link)`
+    text-decoration: none;
+    color: inherit;
 `
 
 export default Header
