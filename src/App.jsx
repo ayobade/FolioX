@@ -4,6 +4,8 @@ import Header from './components/header'
 import Hero from './components/hero'
 import Testimonials from './components/testimonials'
 import HowItWorks from './components/howItWorks'
+import Newsletter from './components/newsletter'
+import Footer from './components/footer'
 
 
 function App() {
@@ -12,9 +14,9 @@ function App() {
       <Header />
       <Hero />
       <HowItWorks />
-     <Testimonials />
-     
-     
+      <Testimonials />
+      <Newsletter />
+      <Footer />
     </div>
   )
 }
