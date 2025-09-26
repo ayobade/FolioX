@@ -26,9 +26,11 @@ function Login() {
                     <Description>
                         Start for free and see how our portfolio tracking can help you manage your crypto investments.
                     </Description>
-                    <SignUpButton onClick={() => setIsLogin(false)}>
-                        Sign up
-                    </SignUpButton>
+                    <Link to="/signup" style={{ textDecoration: 'none' }}>
+                        <SignUpButton>
+                            Sign up
+                        </SignUpButton>
+                    </Link>
                 </Content>
             </LeftSection>
 
@@ -91,9 +93,7 @@ function Login() {
 
                     <BottomText>
                         New to FolioX? Start now{' '}
-                        <SignUpLink as={Link} to="/signup">
-                            Sign up
-                        </SignUpLink>
+                        <SignUpLink to="/signup">Sign up</SignUpLink>
                     </BottomText>
                 </FormContainer>
             </RightSection>
@@ -349,7 +349,7 @@ const BottomText = styled.p`
     margin: 24px 0 0 0;
 `
 
-const SignUpLink = styled.a`
+const SignUpLink = styled(Link)`
     color: #111827;
     text-decoration: none;
     font-weight: 600;

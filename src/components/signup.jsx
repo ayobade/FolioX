@@ -26,9 +26,11 @@ function Signup() {
                     <Description>
                         Login to your account to continue.
                     </Description>
-                    <SignUpButton onClick={() => setIsLogin(false)}>
-                        Login
-                    </SignUpButton>
+                    <Link to="/login" style={{ textDecoration: 'none' }}>
+                        <SignUpButton>
+                            Login
+                        </SignUpButton>
+                    </Link>
                 </Content>
             </LeftSection>
 
@@ -91,9 +93,7 @@ function Signup() {
 
                     <BottomText>
                         Already a member of FolioX?{' '}
-                        <SignUpLink as={Link} to="/login">
-                            Login
-                        </SignUpLink>
+                        <SignUpLink to="/login">Login</SignUpLink>
                     </BottomText>
                 </FormContainer>
             </RightSection>
@@ -349,7 +349,7 @@ const BottomText = styled.p`
     margin: 24px 0 0 0;
 `
 
-const SignUpLink = styled.a`
+const SignUpLink = styled(Link)`
     color: #111827;
     text-decoration: none;
     font-weight: 600;
