@@ -3,23 +3,71 @@ import styled from 'styled-components'
 import bg from '/bg.png'
 import { Link } from 'react-router-dom'
 import logo from '/Logoblack.png'
+import { auth } from '../firebase'
+import { createUserWithEmailAndPassword, sendEmailVerification, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import { useNavigate } from 'react-router-dom'
 
 function Signup() {
     const [isLogin, setIsLogin] = useState(true)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [error, setError] = useState('')
+    const [showSuccess, setShowSuccess] = useState(false)
+    const [showPassword, setShowPassword] = useState(false)
+    const navigate = useNavigate()
 
-    const handleSubmit = (e) => {
+    const handleGoogleSignUp = async () => {
+        try {
+            const provider = new GoogleAuthProvider()
+            const result = await signInWithPopup(auth, provider)
+            navigate('/dashboard')
+        } catch (err) {
+            const code = err?.code || ''
+            if (code === 'auth/popup-closed-by-user') {
+                return
+            } else if (code === 'auth/popup-blocked') {
+                setError('Popup was blocked. Please allow popups for this site.')
+            } else if (code === 'auth/cancelled-popup-request') {
+                return
+            } else {
+                setError('Unable to sign up with Google. Please try again.')
+            }
+        }
+    }
+
+    const handleSubmit = async (e) => {
         e.preventDefault()
-      
-        console.log(isLogin ? 'Login' : 'Signup', { email, password })
+        setError('')
+        try {
+            const cred = await createUserWithEmailAndPassword(auth, email, password)
+            if (cred?.user) {
+                await sendEmailVerification(cred.user, {
+                    url: 'http://localhost:5173/login',
+                })
+            }
+            setShowSuccess(true)
+        } catch (err) {
+            const code = err?.code || ''
+            if (code === 'auth/email-already-in-use') {
+                setError('Email already in use.')
+            } else if (code === 'auth/invalid-email') {
+                setError('Please enter a valid email address.')
+            } else if (code === 'auth/weak-password') {
+                setError('Password should be at least 6 characters.')
+            } else {
+                setError('Unable to sign up. Please try again.')
+            }
+        }
     }
 
     return (
+        <div>
         <Container>
             <LeftSection>
                 <Logo>
-                    <LogoImg src={logo} alt="FolioX Logo" />
+                    <Link to="/" aria-label="Go to home">
+                        <LogoImg src={logo} alt="FolioX Logo" />
+                    </Link>
                 </Logo>
                 <Content>
                     <Title>Already a member of FolioX?</Title>
@@ -41,7 +89,7 @@ function Signup() {
                     </FormTitle>
 
                     <SocialButtons>
-                        <SocialButton>
+                        <SocialButton onClick={handleGoogleSignUp} type="button">
                             <svg width="20" height="20" viewBox="0 0 24 24">
                                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -69,14 +117,34 @@ function Signup() {
                             />
                         </InputGroup>
                         <InputGroup>
-                            <Input
-                                type="password"
-                                placeholder="Enter your password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                            />
+                            <PasswordField>
+                                <PasswordInput
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="Enter your password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                />
+                                <ToggleVisibility
+                                    type="button"
+                                    onClick={() => setShowPassword((prev) => !prev)}
+                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                >
+                                    {showPassword ? (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M3 3l18 18" stroke="#6b7280" strokeWidth="2" strokeLinecap="round"/>
+                                            <path d="M10.584 10.584A3 3 0 0012 15a3 3 0 002.828-4.116M4.5 12C6.5 7 10 5 12 5s5.5 2 7.5 7c-.566 1.416-1.338 2.676-2.287 3.74M6.29 6.29C4.94 7.45 3.79 9.03 3 12c2 5 6 7 9 7 1.533 0 3.064-.47 4.5-1.37" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        </svg>
+                                    ) : (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            <circle cx="12" cy="12" r="3" stroke="#6b7280" strokeWidth="2"/>
+                                        </svg>
+                                    )}
+                                </ToggleVisibility>
+                            </PasswordField>
                         </InputGroup>
+                        {error ? <ErrorText>{error}</ErrorText> : null}
 
                         <Options>
                             <CheckboxGroup>
@@ -98,6 +166,21 @@ function Signup() {
                 </FormContainer>
             </RightSection>
         </Container>
+        {showSuccess && (
+            <ModalOverlay>
+                <ModalCard>
+                    <ModalTitle>Signup successful!</ModalTitle>
+                    <ModalText>Please check your email to verify your account.</ModalText>
+                    <ModalActions>
+                        <Link to="/login" style={{ textDecoration: 'none' }}>
+                            <PrimaryAction onClick={() => setShowSuccess(false)}>Go to Login</PrimaryAction>
+                        </Link>
+                        <SecondaryAction onClick={() => setShowSuccess(false)}>Close</SecondaryAction>
+                    </ModalActions>
+                </ModalCard>
+            </ModalOverlay>
+        )}
+    </div>
     )
 }
 
@@ -289,6 +372,50 @@ const Input = styled.input`
     }
 `
 
+const PasswordField = styled.div`
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 12px 44px 12px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #ffffff;
+
+    &:focus-within {
+        border-color: #111827;
+    }
+`
+
+const PasswordInput = styled.input`
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 16px;
+    color: #111827;
+
+    &::placeholder {
+        color: #9ca3af;
+    }
+`
+
+const ToggleVisibility = styled.button`
+    position: absolute;
+    right: 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    color: #6b7280;
+
+    &:hover {
+        color: #111827;
+    }
+`
+
 const Options = styled.div`
     display: flex;
     justify-content: space-between;
@@ -359,6 +486,73 @@ const SignUpLink = styled(Link)`
     &:hover {
         color: #374151;
     }
+`
+
+const ErrorText = styled.p`
+    color: #ef4444;
+    font-size: 12px;
+    margin: 0 0 8px 0;
+`
+
+
+
+const ModalOverlay = styled.div`
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+`
+
+const ModalCard = styled.div`
+    background: #ffffff;
+    width: 90%;
+    max-width: 420px;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    text-align: center;
+`
+
+const ModalTitle = styled.h3`
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    color: #111827;
+    font-weight: 700;
+`
+
+const ModalText = styled.p`
+    margin: 0 0 20px 0;
+    color: #374151;
+    font-size: 14px;
+`
+
+const ModalActions = styled.div`
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+`
+
+const PrimaryAction = styled.button`
+    padding: 10px 16px;
+    background: #111827;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+`
+
+const SecondaryAction = styled.button`
+    padding: 10px 16px;
+    background: #f3f4f6;
+    color: #111827;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
 `
 
 export default Signup
