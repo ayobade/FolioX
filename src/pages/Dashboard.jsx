@@ -1,7 +1,6 @@
 import { usePortfolio } from '../contexts/PortfolioContext'
 import React, { useState } from 'react'
 import Sidebar from './Sidebar'
-import Dashboard1 from './Dashboard1'
 import Overview from './overview'
 import { PriceProvider } from '../contexts/PriceProvider'
 
