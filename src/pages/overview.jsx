@@ -12,26 +12,42 @@ import {
   Tooltip,
   Legend as ChartLegend
 } from 'chart.js'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
 import AddCoinModal from './AddCoinModal'
+import { usePrice } from '../contexts/PriceProvider'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Filler, Tooltip, ChartLegend)
 
-function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePortfolio, handleAddCoin }) {
+function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePortfolio, handleAddCoin, handleRemoveAsset }) {
     const [activeMenu, setActiveMenu] = React.useState(null)
     const [menuPosition, setMenuPosition] = React.useState({ x: 0, y: 0 })
     const [isAddCoinModalOpen, setIsAddCoinModalOpen] = useState(false)
     const [currentTime, setCurrentTime] = useState(Date.now())
+    const [selectedTimeframe, setSelectedTimeframe] = useState('all')
+    
+    const { priceData, fetchPrices, fetchHistoricalData, getFilteredHistoricalData, symbolToCoinId } = usePrice()
 
-    // Update current time every minute
+    const assetSymbols = useMemo(() => (activePortfolio?.assets?.map(a => a.symbol) || []), [activePortfolio?.assets])
+    const assetSymbolsKey = useMemo(() => assetSymbols.join(','), [assetSymbols])
+
     useEffect(() => {
         const interval = setInterval(() => {
             setCurrentTime(Date.now())
-        }, 60000) // Update every minute
+        }, 60000)
 
         return () => clearInterval(interval)
     }, [])
 
-    // Function to format relative time
+    useEffect(() => {
+        if (!assetSymbols.length) return
+        fetchPrices(assetSymbols)
+    }, [assetSymbolsKey])
+
+    useEffect(() => {
+        if (!assetSymbols.length) return
+        fetchHistoricalData(assetSymbols, 90)
+    }, [assetSymbolsKey])
+
     const formatRelativeTime = (timestamp) => {
         const diff = currentTime - timestamp
         const minutes = Math.floor(diff / (1000 * 60))
@@ -44,7 +60,211 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
         return `${days} day${days > 1 ? 's' : ''} ago`
     }
 
-    // Dynamic allocation data based on active portfolio
+    const calculateCumulativePerformance = () => {
+        if (!activePortfolio?.activities?.length) return { chartData: [], allTimeProfit: 0, allTimeReturn: 0, currentValue: 0 }
+
+        const activities = [...activePortfolio.activities].sort((a, b) => a.timestamp - b.timestamp)
+        const currentDate = new Date()
+        const oldestDate = new Date(activities[0].timestamp)
+        
+        let startDate
+        switch (selectedTimeframe) {
+            case 'all':
+            default:
+                startDate = new Date(oldestDate.getFullYear(), oldestDate.getMonth(), oldestDate.getDate())
+                break
+        }
+        
+        const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
+        
+        const generateTimeline = () => {
+            const timeline = []
+            
+            switch (selectedTimeframe) {
+                case 'all':
+                default:
+                    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
+                    const hoursDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60))
+                    
+                    timeline.push(new Date(startDate))
+                    
+                    if (hoursDiff <= 24) {
+                        let currentDate = new Date(startDate)
+                        currentDate.setHours(currentDate.getHours() + 1)
+                        while (currentDate <= endDate) {
+                            timeline.push(new Date(currentDate))
+                            currentDate.setHours(currentDate.getHours() + 1)
+                        }
+                    } else if (daysDiff < 7) {
+                        let currentDate = new Date(startDate)
+                        currentDate.setDate(currentDate.getDate() + 1)
+                        while (currentDate <= endDate) {
+                            timeline.push(new Date(currentDate))
+                            currentDate.setDate(currentDate.getDate() + 1)
+                        }
+                    } else if (daysDiff < 30) {
+                        let currentDate = new Date(startDate)
+                        currentDate.setDate(currentDate.getDate() + 7)
+                        while (currentDate <= endDate) {
+                            timeline.push(new Date(currentDate))
+                            currentDate.setDate(currentDate.getDate() + 7)
+                        }
+                    } else if (daysDiff < 365) {
+                        let currentDate = new Date(startDate)
+                        currentDate.setMonth(currentDate.getMonth() + 1)
+                        while (currentDate <= endDate) {
+                            timeline.push(new Date(currentDate))
+                            currentDate.setMonth(currentDate.getMonth() + 1)
+                        }
+                    } else {
+                        let currentDate = new Date(startDate)
+                        currentDate.setMonth(currentDate.getMonth() + 6)
+                        while (currentDate <= endDate) {
+                            timeline.push(new Date(currentDate))
+                            currentDate.setMonth(currentDate.getMonth() + 6)
+                        }
+                    }
+                    break
+            }
+            
+            return timeline
+        }
+        
+        const timeline = generateTimeline()
+        
+        let chartData = []
+
+        timeline.forEach((timelineDate) => {
+            let portfolioValue = 0
+            
+            const holdingsAtTime = {}
+            
+            activities.forEach((activity) => {
+                if (new Date(activity.timestamp) <= timelineDate) {
+                    if (activity.type === 'buy' || activity.type === 'transfer_in') {
+                        if (!holdingsAtTime[activity.asset]) {
+                            holdingsAtTime[activity.asset] = { amount: 0, totalInvested: 0 }
+                        }
+                        holdingsAtTime[activity.asset].amount += activity.amount
+                        holdingsAtTime[activity.asset].totalInvested += Math.abs(activity.numericValue || 0)
+                    } else if (activity.type === 'sell' || activity.type === 'transfer_out') {
+                        if (holdingsAtTime[activity.asset]) {
+                            holdingsAtTime[activity.asset].amount -= activity.amount
+                            if (holdingsAtTime[activity.asset].amount <= 0) {
+                                delete holdingsAtTime[activity.asset]
+                            }
+                        }
+                    }
+                }
+            })
+            
+            Object.entries(holdingsAtTime).forEach(([assetName, holding]) => {
+                if (holding.amount > 0) {
+                    const currentAsset = activePortfolio.assets?.find(asset => asset.name === assetName)
+                    if (currentAsset) {
+                        const coinId = symbolToCoinId[currentAsset.symbol] || currentAsset.symbol.toLowerCase()
+                        const fallbackCurrentPrice = priceData[coinId]?.usd || (currentAsset.value / currentAsset.amount)
+                        let priceAtTime = fallbackCurrentPrice
+                        
+                        const filteredData = getFilteredHistoricalData(currentAsset.symbol)
+                        if (filteredData && filteredData.prices && filteredData.prices.length > 0) {
+                            const targetTime = timelineDate.getTime()
+                            let closestPrice = filteredData.prices[0]
+                            
+                            for (const [timestamp, price] of filteredData.prices) {
+                                if (Math.abs(timestamp - targetTime) < Math.abs(closestPrice[0] - targetTime)) {
+                                    closestPrice = [timestamp, price]
+                                }
+                            }
+                            
+                            priceAtTime = closestPrice[1] ?? fallbackCurrentPrice
+                        }
+                        
+                        portfolioValue += holding.amount * priceAtTime
+                    }
+                }
+            })
+            
+            let dateFormat
+            switch (selectedTimeframe) {
+                case 'all':
+                default:
+                    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
+                    const hoursDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60))
+                    if (hoursDiff <= 24) {
+                        dateFormat = timelineDate.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true })
+                    } else if (daysDiff < 7) {
+                        dateFormat = timelineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    } else if (daysDiff < 30) {
+                        dateFormat = timelineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    } else if (daysDiff < 365) {
+                        dateFormat = timelineDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                    } else {
+                        dateFormat = timelineDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                    }
+                    break
+            }
+
+            chartData.push({
+                date: dateFormat,
+                timestamp: timelineDate.getTime(),
+                portfolioValue: portfolioValue
+            })
+        })
+
+        const currentTotalValue = activePortfolio.assets?.reduce((sum, asset) => {
+            const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+            const currentPrice = priceData[coinId]?.usd || (asset.value / asset.amount)
+            return sum + (asset.amount * currentPrice)
+        }, 0) || 0
+
+        const totalInvestedFromAssets = activePortfolio.assets?.reduce((sum, asset) => {
+            return sum + (asset.originalCost || asset.value)
+        }, 0) || 0
+
+        const totalInvestedFromActivities = activities
+            .filter(activity => activity.type === 'buy' || activity.type === 'transfer_in')
+            .reduce((sum, activity) => sum + Math.abs(activity.numericValue || 0), 0)
+
+        const totalInvested = totalInvestedFromAssets > 0 ? totalInvestedFromAssets : totalInvestedFromActivities
+
+        const totalRealized = activities
+            .filter(activity => activity.type === 'sell' || activity.type === 'transfer_out')
+            .reduce((sum, activity) => sum + Math.abs(activity.numericValue || 0), 0)
+
+        const allTimeProfit = (totalRealized + currentTotalValue) - totalInvested
+        const allTimeReturn = totalInvested > 0 ? (allTimeProfit / totalInvested) * 100 : 0
+
+        if (chartData.length === 0) {
+            chartData = [
+                {
+                    date: startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    timestamp: startDate.getTime(),
+                    portfolioValue: currentTotalValue
+                },
+                {
+                    date: endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    timestamp: endDate.getTime(),
+                    portfolioValue: currentTotalValue
+                }
+            ]
+        }
+
+        let limitedChartData = chartData
+        if (chartData.length > 5) {
+            const first = chartData[0]
+            const last = chartData[chartData.length - 1]
+            const q1 = chartData[Math.floor(chartData.length * 0.25)]
+            const mid = chartData[Math.floor(chartData.length * 0.5)]
+            const q3 = chartData[Math.floor(chartData.length * 0.75)]
+            limitedChartData = [first, q1, mid, q3, last]
+        }
+
+        return { chartData: limitedChartData, allTimeProfit, allTimeReturn, totalInvested, totalRealized, currentValue: currentTotalValue }
+    }
+
+    const performance = useMemo(() => calculateCumulativePerformance(), [activePortfolio, priceData, selectedTimeframe])
+
     const allocation = useMemo(() => {
         if (!activePortfolio?.assets?.length) {
             return [
@@ -53,15 +273,27 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
             ]
         }
         
-        const totalValue = activePortfolio.assets.reduce((sum, asset) => sum + asset.value, 0)
+        const totalValue = activePortfolio.assets.reduce((sum, asset) => {
+            const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+            const priceInfo = priceData[coinId]
+            const currentPrice = priceInfo?.usd || (asset.value / asset.amount)
+            return sum + (asset.amount * currentPrice)
+        }, 0)
         
-        return activePortfolio.assets.map((asset, index) => ({
-            symbol: asset.symbol,
-            value: asset.value,
-            percent: totalValue > 0 ? (asset.value / totalValue) * 100 : 0,
-            color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'][index % 6]
-        }))
-    }, [activePortfolio])
+        return activePortfolio.assets.map((asset, index) => {
+            const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+            const priceInfo = priceData[coinId]
+            const currentPrice = priceInfo?.usd || (asset.value / asset.amount)
+            const currentValue = asset.amount * currentPrice
+            
+            return {
+                symbol: asset.symbol,
+                value: currentValue,
+                percent: totalValue > 0 ? (currentValue / totalValue) * 100 : 0,
+                color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'][index % 6]
+            }
+        })
+    }, [activePortfolio, priceData])
 
     const doughnutData = useMemo(() => ({
         labels: allocation.map((a) => a.symbol),
@@ -165,9 +397,24 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                             </svg>
                         </StatIcon>
                         <StatContent>
-                            <StatValue>{activePortfolio?.value || '$0.00'}</StatValue>
+                            <StatValue>
+                                {(() => {
+                                    const { currentValue } = performance
+                                    return `$${currentValue.toLocaleString()}`
+                                })()}
+                            </StatValue>
                             <StatLabel>Total Portfolio Value</StatLabel>
-                            <StatChange $positive>+12.5%</StatChange>
+                            <StatChange $positive={
+                                (() => {
+                                    const { allTimeReturn } = performance
+                                    return allTimeReturn >= 0
+                                })()
+                            }>
+                                {(() => {
+                                    const { allTimeReturn } = performance
+                                    return allTimeReturn >= 0 ? `+${allTimeReturn.toFixed(1)}%` : `${allTimeReturn.toFixed(1)}%`
+                                })()}
+                            </StatChange>
                         </StatContent>
                     </StatCard>
 
@@ -181,21 +428,22 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                         </StatIcon>
                         <StatContent>
                             <StatValue>
-                                {activePortfolio?.assets?.length ? 
-                                    `$${activePortfolio.assets.reduce((sum, asset) => sum + (asset.value * asset.change24h / 100), 0).toFixed(0)}` : 
-                                    '$0'
-                                }
+                                {(() => {
+                                    const { allTimeProfit } = performance
+                                    return `$${allTimeProfit.toFixed(0)}`
+                                })()}
                             </StatValue>
-                            <StatLabel>Profit & Loss (PnL)</StatLabel>
+                            <StatLabel>All-Time Profit & Loss (PnL)</StatLabel>
                             <StatChange $positive={
-                                activePortfolio?.assets?.length ? 
-                                    activePortfolio.assets.reduce((sum, asset) => sum + asset.change24h, 0) / activePortfolio.assets.length >= 0 :
-                                    true
+                                (() => {
+                                    const { allTimeReturn } = performance
+                                    return allTimeReturn >= 0
+                                })()
                             }>
-                                {activePortfolio?.assets?.length ? 
-                                    `${(activePortfolio.assets.reduce((sum, asset) => sum + asset.change24h, 0) / activePortfolio.assets.length).toFixed(1)}%` : 
-                                    '0.0%'
-                                }
+                                {(() => {
+                                    const { allTimeReturn } = performance
+                                    return `${allTimeReturn.toFixed(1)}%`
+                                })()}
                             </StatChange>
                         </StatContent>
                     </StatCard>
@@ -209,17 +457,59 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                         </StatIcon>
                         <StatContent>
                             <StatValue>
-                                {activePortfolio?.assets?.length ? 
-                                    `+$${activePortfolio.assets.reduce((sum, asset) => sum + (asset.value * asset.change24h / 100), 0).toFixed(0)}` : 
-                                    '+$0'
-                                }
+                                {(() => {
+                                    if (!activePortfolio?.assets?.length || !priceData) return '+$0'
+                                    
+                                    
+                                    let total24hChange = 0
+                                    activePortfolio.assets.forEach(asset => {
+                                        const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+                                        const priceInfo = priceData[coinId]
+                                        if (priceInfo && priceInfo.usd_24h_change) {
+                                            const currentValue = asset.amount * priceInfo.usd
+                                            const changeValue = currentValue * (priceInfo.usd_24h_change / 100)
+                                            total24hChange += changeValue
+                                        }
+                                    })
+                                    
+                                    return total24hChange >= 0 ? `+$${total24hChange.toFixed(0)}` : `$${total24hChange.toFixed(0)}`
+                                })()}
                             </StatValue>
                             <StatLabel>24h Change</StatLabel>
-                            <StatChange $positive>
-                                {activePortfolio?.assets?.length ? 
-                                    `+${(activePortfolio.assets.reduce((sum, asset) => sum + asset.change24h, 0) / activePortfolio.assets.length).toFixed(1)}%` : 
-                                    '+0.0%'
-                                }
+                            <StatChange $positive={
+                                (() => {
+                                    if (!activePortfolio?.assets?.length || !priceData) return true
+                                    
+                                    
+                                    let total24hChange = 0
+                                    activePortfolio.assets.forEach(asset => {
+                                        const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+                                        const priceInfo = priceData[coinId]
+                                        if (priceInfo && priceInfo.usd_24h_change) {
+                                            total24hChange += priceInfo.usd_24h_change
+                                        }
+                                    })
+                                    
+                                    const avgChange = total24hChange / activePortfolio.assets.length
+                                    return avgChange >= 0
+                                })()
+                            }>
+                                {(() => {
+                                    if (!activePortfolio?.assets?.length || !priceData) return '+0.0%'
+                                    
+                                    
+                                    let total24hChange = 0
+                                    activePortfolio.assets.forEach(asset => {
+                                        const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+                                        const priceInfo = priceData[coinId]
+                                        if (priceInfo && priceInfo.usd_24h_change) {
+                                            total24hChange += priceInfo.usd_24h_change
+                                        }
+                                    })
+                                    
+                                    const avgChange = total24hChange / activePortfolio.assets.length
+                                    return avgChange >= 0 ? `+${avgChange.toFixed(1)}%` : `${avgChange.toFixed(1)}%`
+                                })()}
                             </StatChange>
                         </StatContent>
                     </StatCard>
@@ -233,7 +523,49 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                         <StatContent>
                             <StatValue>{activePortfolio?.assets?.length || 0}</StatValue>
                             <StatLabel>Total Assets</StatLabel>
-                            <StatChange $positive>+{activePortfolio?.assets?.length || 0}</StatChange>
+                            <StatChange $positive={
+                                (() => {
+                                    if (!activePortfolio?.assets?.length || !priceData) return true
+                                    
+                                    
+                                    let total7dChange = 0
+                                    let validAssets = 0
+                                    
+                                    activePortfolio.assets.forEach(asset => {
+                                        const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+                                        const priceInfo = priceData[coinId]
+                                        if (priceInfo && priceInfo.usd_7d_change !== undefined) {
+                                            total7dChange += priceInfo.usd_7d_change
+                                            validAssets++
+                                        }
+                                    })
+                                    
+                                    if (validAssets === 0) return true
+                                    const avg7dChange = total7dChange / validAssets
+                                    return avg7dChange >= 0
+                                })()
+                            }>
+                                {(() => {
+                                    if (!activePortfolio?.assets?.length || !priceData) return '+0.0%'
+                                    
+                                    
+                                    let total7dChange = 0
+                                    let validAssets = 0
+                                    
+                                    activePortfolio.assets.forEach(asset => {
+                                        const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+                                        const priceInfo = priceData[coinId]
+                                        if (priceInfo && priceInfo.usd_7d_change !== undefined) {
+                                            total7dChange += priceInfo.usd_7d_change
+                                            validAssets++
+                                        }
+                                    })
+                                    
+                                    if (validAssets === 0) return '+0.0%'
+                                    const avg7dChange = total7dChange / validAssets
+                                    return avg7dChange >= 0 ? `+${avg7dChange.toFixed(1)}%` : `${avg7dChange.toFixed(1)}%`
+                                })()}
+                            </StatChange>
                         </StatContent>
                     </StatCard>
                 </StatsGrid>
@@ -243,26 +575,74 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                         <SectionHeader>
                             <SectionTitle>Performance</SectionTitle>
                             <TimeFrameSelector>
-                                <TimeFrame $active>1D</TimeFrame>
-                                <TimeFrame>7D</TimeFrame>
-                                <TimeFrame>1M</TimeFrame>
-                                <TimeFrame>1Y</TimeFrame>
+                                <TimeFrame $active={selectedTimeframe === 'all'} onClick={() => setSelectedTimeframe('all')}>All</TimeFrame>
                             </TimeFrameSelector>
                         </SectionHeader>
-                        <ChartPlaceholder>
-                            <ChartIcon>
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        {(() => {
+                            const { chartData, allTimeProfit, allTimeReturn } = performance
+                            
+                            if (chartData.length === 0) {
+                                return (
+                                    <ChartPlaceholder>
+                                        <ChartIcon>
+                                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                         </svg>
-                            </ChartIcon>
-                            <ChartText>Chart visualization will be implemented here</ChartText>
-                        </ChartPlaceholder>
+                                        </ChartIcon>
+                                        <ChartText>No performance data available</ChartText>
+                                    </ChartPlaceholder>
+                                )
+                            }
+
+                            return (
+                                <div style={{ padding: '16px 0' }}>
+                                    <div style={{ height: '200px', width: '100%' }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={chartData}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                                <XAxis 
+                                                    dataKey="date" 
+                                                    stroke="#6b7280"
+                                                    fontSize={12}
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                />
+                                                <YAxis 
+                                                    stroke="#6b7280"
+                                                    fontSize={12}
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    tickFormatter={(value) => `$${value.toLocaleString()}`}
+                                                />
+                                                <RechartsTooltip 
+                                                    contentStyle={{
+                                                        backgroundColor: '#ffffff',
+                                                        border: '1px solid #e5e7eb',
+                                                        borderRadius: '8px',
+                                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                                    }}
+                                                    formatter={(value) => [`$${value.toLocaleString()}`, 'Portfolio Value']}
+                                                />
+                                                <Area 
+                                                    type="monotone" 
+                                                    dataKey="portfolioValue" 
+                                                    stroke="#10b981"
+                                                    fill="#10b981"
+                                                    fillOpacity={0.1}
+                                                    strokeWidth={2}
+                                                />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )
+                        })()}
                     </ChartSection>
                     <AllocationSection>
                         <SectionHeader>
                             <SectionTitle>Allocation</SectionTitle>
-                            <ViewAllButton>View All</ViewAllButton>
+                            
                         </SectionHeader>
                         <AllocationContent>
                             {activePortfolio?.assets?.length > 0 ? (
@@ -306,52 +686,60 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                  <AssetsSection>
                      <SectionHeader>
                          <SectionTitle>Assets</SectionTitle>
-                         <ViewAllButton>View All</ViewAllButton>
+                        
                      </SectionHeader>
                      <AssetsTable>
                          <AssetsRow $header>
                              <div>Name</div>
                              <div>Amount</div>
-                             <div>Price</div>
-                             <div>24h%</div>
-                             <div>7d%</div>
+                             <div>Price/unit</div>
                              <div>Holdings</div>
                              <div>Profit/Loss</div>
                              <div>Actions</div>
                          </AssetsRow>
-                        {activePortfolio?.assets?.map((asset) => (
-                            <AssetsRow key={asset.id}>
-                                <CoinCell>
-                                    <CoinAvatar>{asset.symbol.charAt(0)}</CoinAvatar>
-                                    <div>
-                                        <div style={{ fontWeight: 600 }}>{asset.name}</div>
-                                        <div style={{ color: '#6b7280', fontSize: 14 }}>{asset.symbol}</div>
+                        {activePortfolio?.assets?.map((asset, idx) => {
+                            const coinId = symbolToCoinId[asset.symbol] || asset.symbol.toLowerCase()
+                            const priceInfo = priceData[coinId]
+                            
+                            const currentPrice = priceInfo?.usd || (asset.value / asset.amount)
+                            const currentValue = asset.amount * currentPrice
+                            
+                            const averagePurchasePrice = asset.originalCost ? (asset.originalCost / asset.amount) : (asset.value / asset.amount)
+                            const priceDifferencePerUnit = currentPrice - averagePurchasePrice
+                            const totalProfitLoss = priceDifferencePerUnit * asset.amount
+                            const profitLossPercent = averagePurchasePrice > 0 ? (priceDifferencePerUnit / averagePurchasePrice) * 100 : 0
+                            
+                            return (
+                                <AssetsRow key={asset.id || asset.symbol || asset.name || idx}>
+                                    <CoinCell>
+                                        <CoinAvatar>{asset.symbol.charAt(0)}</CoinAvatar>
+                                        <div>
+                                            <div style={{ fontWeight: 600 }}>{asset.name}</div>
+                                            <div style={{ color: '#6b7280', fontSize: 14 }}>{asset.symbol}</div>
+                                        </div>
+                                    </CoinCell>
+                                    <div>{asset.amount}</div>
+                                    <div>${currentPrice.toLocaleString()}</div>
+                                    <div>${currentValue.toLocaleString()}</div>
+                                    <div style={{ color: totalProfitLoss >= 0 ? '#10B981' : '#EF4444', lineHeight: '1.2' }}>
+                                        <div>{totalProfitLoss >= 0 ? '+' : ''}${totalProfitLoss.toFixed(0)}</div>
+                                        <div>{totalProfitLoss >= 0 ? '▲' : '▼'} {Math.abs(profitLossPercent).toFixed(2)}%</div>
                                     </div>
-                                </CoinCell>
-                                <div>{asset.amount}</div>
-                                <div>${(asset.value / asset.amount).toLocaleString()}</div>
-                                <div style={{ color: asset.change24h >= 0 ? '#10B981' : '#EF4444' }}>
-                                    {asset.change24h >= 0 ? '+' : ''}{asset.change24h}%
-                                </div>
-                                <div style={{ color: asset.change7d >= 0 ? '#10B981' : '#EF4444' }}>
-                                    {asset.change7d >= 0 ? '+' : ''}{asset.change7d}%
-                                </div>
-                                <div>${asset.value.toLocaleString()}</div>
-                                <div style={{ color: asset.change24h >= 0 ? '#10B981' : '#EF4444', lineHeight: '1.2' }}>
-                                    <div>{asset.change24h >= 0 ? '+' : ''}${(asset.value * asset.change24h / 100).toFixed(0)}</div>
-                                    <div>{asset.change24h >= 0 ? '▲' : '▼'} {Math.abs(asset.change24h).toFixed(2)}%</div>
-                                </div>
-                                <ActionCell>
-                                    <ActionButton data-menu-button onClick={(e) => handleMenuClick(e, asset.id)}>⋯</ActionButton>
-                                    {activeMenu === asset.id && (
-                                        <ActionMenu data-menu style={{ left: `${Math.max(8, menuPosition.x)}px`, top: `${Math.max(8, menuPosition.y)}px` }}>
-                                            <MenuItem onClick={handleMenuClose}>View transactions</MenuItem>
-                                            <MenuItem onClick={handleMenuClose}>Remove</MenuItem>
-                                        </ActionMenu>
-                                    )}
-                                </ActionCell>
-                            </AssetsRow>
-                        )) || (
+                                    <ActionCell>
+                                        <ActionButton data-menu-button onClick={(e) => handleMenuClick(e, asset.id)}>⋯</ActionButton>
+                                        {activeMenu === asset.id && (
+                                            <ActionMenu data-menu style={{ left: `${Math.max(8, menuPosition.x)}px`, top: `${Math.max(8, menuPosition.y)}px` }}>
+                                                
+                                                <MenuItem onClick={() => {
+                                                    handleRemoveAsset(asset.symbol)
+                                                    handleMenuClose()
+                                                }}>Remove Transaction</MenuItem>
+                                            </ActionMenu>
+                                        )}
+                                    </ActionCell>
+                                </AssetsRow>
+                            )
+                        }) || (
                             <AssetsRow>
                                 <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#6b7280' }}>
                                     No asset added yet
@@ -364,7 +752,7 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                  <RecentActivity>
                      <SectionHeader>
                          <SectionTitle>Recent Activity</SectionTitle>
-                         <ViewAllButton>View All</ViewAllButton>
+                        
                      </SectionHeader>
                      <ActivityList>
                          {activePortfolio?.activities?.map((activity) => (
@@ -430,7 +818,7 @@ const OverviewContainer = styled.div`
     transition: all 0.3s ease;
     
     @media (max-width: 1200px) {
-        width: 100%;
+    width: 100%;
         margin-left: 0;
     }
     
@@ -829,7 +1217,7 @@ const ChartSection = styled.div`
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     
     @media (max-width: 768px) {
-        padding: 20px;
+    padding: 20px;
     }
 `
 
@@ -1053,7 +1441,7 @@ const AssetsTable = styled.div`
 
 const AssetsRow = styled.div`
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1.5fr 0.8fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 0.8fr;
     gap: 12px;
     padding: 12px 16px;
     align-items: center;

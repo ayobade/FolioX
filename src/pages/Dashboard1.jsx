@@ -649,7 +649,8 @@ function Dashboard1() {
           signal: controller.signal,
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
           }
         })
         if (!idsRes.ok) return
@@ -663,7 +664,8 @@ function Dashboard1() {
           signal: controller.signal,
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
           }
         })
         if (!res.ok) return
@@ -674,7 +676,8 @@ function Dashboard1() {
           bySymbol[sym] = { price: d.current_price, h1: d.price_change_percentage_1h_in_currency, d1: d.price_change_percentage_24h_in_currency, d7: d.price_change_percentage_7d_in_currency }
         })
         setMarketData(bySymbol)
-      } catch {}
+      } catch {
+      }
     }
     load()
     return () => controller.abort()
@@ -683,7 +686,6 @@ function Dashboard1() {
   React.useEffect(() => {
     const earliest = earliestPurchaseDate
     if (!earliest || transactions.length === 0) { 
-      console.log('No earliest date or transactions:', { earliest, transactionsLength: transactions.length })
       setPnlSeries([]); 
       return 
     }
@@ -695,13 +697,13 @@ function Dashboard1() {
         const today = new Date()
         const msDay = 24 * 60 * 60 * 1000
         const days = Math.max(1, Math.ceil((today - start) / msDay) + 1)
-        console.log('Calculating PnL for', days, 'days from', start.toISOString(), 'to', today.toISOString())
 
         const idsRes = await fetch('/cg/api/v3/coins/list?include_platform=false', { 
           signal: controller.signal,
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
           }
         })
         if (!idsRes.ok) return
@@ -710,14 +712,13 @@ function Dashboard1() {
         all.forEach((c) => { 
           if (c.symbol) {
             const sym = (c.symbol || '').toUpperCase()
-            // Prefer main coins over wrapped versions
             if (sym === 'BTC' && c.id === 'bitcoin') symToId[sym] = c.id
             else if (sym === 'ETH' && c.id === 'ethereum') symToId[sym] = c.id
             else if (sym === 'USDT' && c.id === 'tether') symToId[sym] = c.id
             else if (!symToId[sym]) symToId[sym] = c.id
           }
         })
-        console.log('Symbol to ID mapping:', symToId)
+        
 
         const seriesByDay = Array(days).fill(0)
 
@@ -727,68 +728,54 @@ function Dashboard1() {
           acc[sym].push(t)
           return acc
         }, {})
-        console.log('Transactions by symbol:', bySymbol)
+        
 
         await Promise.all(Object.entries(bySymbol).map(async ([sym, txs]) => {
           const id = symToId[sym]
           if (!id) {
-            console.log('No ID found for symbol:', sym)
             return
           }
-          // Create realistic mock historical data based on actual transaction prices
           const prices = []
           
-          // Get the range of transaction prices to create realistic growth
           const txPrices = txs.map(t => Number(t.price))
           const minTxPrice = Math.min(...txPrices)
           const maxTxPrice = Math.max(...txPrices)
           const avgTxPrice = txPrices.reduce((sum, price) => sum + price, 0) / txPrices.length
           
-          // Estimate current price based on transaction prices (assume some growth)
-          const estimatedCurrentPrice = avgTxPrice * 1.5 // Assume 50% growth from average purchase
+          const estimatedCurrentPrice = avgTxPrice * 1.5 
           
-          console.log('Using transaction-based pricing:', {
-            minPrice: minTxPrice,
-            maxPrice: maxTxPrice,
-            avgPrice: avgTxPrice,
-            estimatedCurrent: estimatedCurrentPrice
-          })
+          
           
           for (let i = 0; i < days; i++) {
             const date = new Date(start.getTime() + i * msDay)
             const progress = i / Math.max(1, days - 1) // 0 to 1
             
-            // Start from minimum transaction price, grow to estimated current
             const startPrice = minTxPrice * 0.8 // Start slightly below min transaction price
             const endPrice = estimatedCurrentPrice
             
-            // Smooth growth curve
-            const growthFactor = Math.pow(progress, 0.6) // Gentle growth curve
+            const growthFactor = Math.pow(progress, 0.6) 
             const basePrice = startPrice + (endPrice - startPrice) * growthFactor
             
-            // Add some realistic volatility
-            const volatility = (Math.random() - 0.5) * 0.03 * basePrice // ±1.5% volatility
+            const volatility = (Math.random() - 0.5) * 0.03 * basePrice 
             const historicalPrice = Math.max(basePrice + volatility, startPrice * 0.9)
             
             prices.push([date.getTime(), historicalPrice])
           }
           
-          console.log('Generated', prices.length, 'mock price points for', sym)
+          
 
-          // Filter prices to our date range and create daily array
           const perDay = Array(days).fill(null)
           prices.forEach(([tMs, price]) => {
             const idx = Math.floor((tMs - start.getTime()) / msDay)
             if (idx >= 0 && idx < days) perDay[idx] = price
           })
           
-          // Fill gaps with previous day's price
           for (let i = 1; i < days; i++) {
             if (perDay[i] == null) perDay[i] = perDay[i-1]
           }
           if (perDay[0] == null && prices.length) perDay[0] = prices[0][1]
           
-          console.log('Price per day for', sym, ':', perDay.slice(0, 5), '...', perDay.slice(-5))
+          
 
           txs.forEach((t) => {
             const signedAmount = Number(t.amount)
@@ -796,36 +783,22 @@ function Dashboard1() {
             const purchaseDate = new Date(t.datePurchased)
             const purchaseDayIndex = Math.floor((purchaseDate.getTime() - start.getTime()) / msDay)
             
-            console.log('Processing transaction:', { 
-              sym, 
-              signedAmount, 
-              txPrice, 
-              purchaseDate: purchaseDate.toISOString(),
-              purchaseDayIndex 
-            })
             
-            // Calculate PnL for each day after the purchase
+            
             for (let i = Math.max(0, purchaseDayIndex); i < days; i++) {
               const currentPrice = perDay[i] ?? perDay[Math.max(0, i-1)] ?? txPrice
               
-              // For buys: PnL = Amount * (Current Price - Purchase Price)
-              // For sells: PnL = Amount * (Purchase Price - Current Price) [negative amount]
               const pnl = signedAmount * (currentPrice - txPrice)
               seriesByDay[i] += pnl
               
-              if (i < purchaseDayIndex + 3) {
-                console.log(`Day ${i}: currentPrice=${currentPrice}, purchasePrice=${txPrice}, signedAmount=${signedAmount}, pnl=${pnl}, total=${seriesByDay[i]}`)
-              }
+              
             }
           })
         }))
 
-        console.log('Final PnL series:', seriesByDay.slice(0, 10), '...', seriesByDay.slice(-10))
-        console.log('PnL range:', Math.min(...seriesByDay), 'to', Math.max(...seriesByDay))
-        console.log('First few values:', seriesByDay.slice(0, 5))
-        console.log('Last few values:', seriesByDay.slice(-5))
         setPnlSeries(seriesByDay)
-      } catch {}
+      } catch {
+      }
     }
     load()
     return () => controller.abort()

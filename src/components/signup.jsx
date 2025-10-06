@@ -19,7 +19,7 @@ function Signup() {
     const handleGoogleSignUp = async () => {
         try {
             const provider = new GoogleAuthProvider()
-            const result = await signInWithPopup(auth, provider)
+            await signInWithPopup(auth, provider)
             navigate('/dashboard')
         } catch (err) {
             const code = err?.code || ''

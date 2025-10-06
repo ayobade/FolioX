@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom'
 import logo from '/Logoblack.png'
 import logoIcon from '/Logoicon.png'
 import CreatePortfolioModal from './CreatePortfolioModal'
+import { usePrice } from '../contexts/PriceProvider'
+import { usePortfolio } from '../contexts/PortfolioContext'
 
 const SidebarContainer = styled.div`
   width: ${props => props.$isCollapsed ? '80px' : '300px'};
@@ -302,7 +304,7 @@ const RocketIcon = styled.div`
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  background: ${props => props.$gradient || 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'};
   position: relative;
   box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
   
@@ -492,6 +494,18 @@ const TooltipContainer = styled.div`
 function Sidebar({ isCollapsed, setIsCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePortfolio, setActivePortfolio, portfolios, setPortfolios, handleCreatePortfolio, handlePortfolioClick, totalPortfolioValue }) {
     const [isCreatePortfolioModalOpen, setIsCreatePortfolioModalOpen] = useState(false)
   const navigate = useNavigate()
+  const { priceData, symbolToCoinId } = usePrice()
+  const { transactionsByPortfolio, computeStateFromTransactions, getTransactions } = usePortfolio()
+
+  React.useEffect(() => {
+    if (!portfolios || !portfolios.length) return
+    portfolios.forEach(p => {
+      const key = String(p.id)
+      if (!transactionsByPortfolio[key]) {
+        getTransactions(key)
+      }
+    })
+  }, [portfolios])
 
   const handleSignOut = async () => {
     try {
@@ -543,7 +557,22 @@ function Sidebar({ isCollapsed, setIsCollapsed, isMobileMenuOpen, setIsMobileMen
           </OverviewIcon>
           <OverviewInfo>
             <OverviewLabel>Overview</OverviewLabel>
-            <OverviewValue>${totalPortfolioValue.toLocaleString()}</OverviewValue>
+            <OverviewValue>{(() => {
+              const sum = (portfolios || []).reduce((acc, p) => {
+                let assetsForValue = []
+                if (p.id === activePortfolio?.id && activePortfolio?.assets?.length) assetsForValue = activePortfolio.assets
+                const txs = transactionsByPortfolio[String(p.id)]
+                if (!assetsForValue.length && txs && txs.length) assetsForValue = computeStateFromTransactions(txs).assets
+                if (!assetsForValue || !assetsForValue.length) return acc
+                const val = assetsForValue.reduce((s, a) => {
+                  const cid = symbolToCoinId[a.symbol] || a.symbol?.toLowerCase()
+                  const cp = priceData[cid]?.usd || (a.value / (a.amount || 1))
+                  return s + (a.amount * cp)
+                }, 0)
+                return acc + val
+              }, 0)
+              return `$${Number(sum || 0).toLocaleString()}`
+            })()}</OverviewValue>
           </OverviewInfo>
         </OverviewItem>
       </OverviewSection>
@@ -554,12 +583,27 @@ function Sidebar({ isCollapsed, setIsCollapsed, isMobileMenuOpen, setIsMobileMen
           
         </SectionHeader>
         
-        {portfolios.map((portfolio) => (
+        {portfolios.map((portfolio) => {
+          const isActive = portfolio.isActive || portfolio.id === activePortfolio?.id
+          let computedValue = portfolio.value || '$0.00'
+          let assetsForValue = []
+          if (portfolio.id === activePortfolio?.id && activePortfolio?.assets?.length) assetsForValue = activePortfolio.assets
+          const txs = transactionsByPortfolio[String(portfolio.id)]
+          if (!assetsForValue.length && txs && txs.length) assetsForValue = computeStateFromTransactions(txs).assets
+          if (assetsForValue && assetsForValue.length) {
+            const total = assetsForValue.reduce((sum, asset) => {
+              const coinId = symbolToCoinId[asset.symbol] || asset.symbol?.toLowerCase()
+              const currentPrice = priceData[coinId]?.usd || (asset.value / (asset.amount || 1))
+              return sum + (asset.amount * currentPrice)
+            }, 0)
+            computedValue = `$${Number(total || 0).toLocaleString()}`
+          }
+          return (
           <TooltipContainer key={portfolio.id}>
-            <PortfolioItem $isActive={portfolio.isActive} $isCollapsed={isCollapsed} onClick={() => onPortfolioClick(portfolio.id)}>
+            <PortfolioItem $isActive={isActive} $isCollapsed={isCollapsed} onClick={() => onPortfolioClick(portfolio.id)}>
               <PortfolioIcon $bgColor={portfolio.isActive ? '#f1f5f9' : '#ffffff'} $isCollapsed={isCollapsed}>
-                {portfolio.iconType === 'rocket' ? (
-                  <RocketIcon />
+                {portfolio.iconType?.startsWith('rocket') ? (
+                  <RocketIcon $gradient={portfolio.gradient || 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'} />
                 ) : portfolio.iconType === 'bitcoin' ? (
                   <DefaultIcon style={{background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'}} />
                 ) : portfolio.iconType === 'ethereum' ? (
@@ -583,30 +627,30 @@ function Sidebar({ isCollapsed, setIsCollapsed, isMobileMenuOpen, setIsMobileMen
                 ) : portfolio.iconType === 'trophy' ? (
                   <DefaultIcon style={{background: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)'}} />
                 ) : (
-                  <DefaultIcon />
+                  <RocketIcon />
                 )}
-              </PortfolioIcon>
+            </PortfolioIcon>
               <PortfolioInfo $isCollapsed={isCollapsed}>
-                <PortfolioName>{portfolio.name}</PortfolioName>
-                <PortfolioValue>{portfolio.value}</PortfolioValue>
-              </PortfolioInfo>
-            </PortfolioItem>
+              <PortfolioName>{portfolio.name}</PortfolioName>
+              <PortfolioValue>{computedValue}</PortfolioValue>
+            </PortfolioInfo>
+          </PortfolioItem>
             {isCollapsed && (
               <Tooltip>
-                {portfolio.name} - {portfolio.value}
+                {portfolio.name} - {computedValue}
               </Tooltip>
             )}
           </TooltipContainer>
-        ))}
+        )})}
         
         <TooltipContainer>
           <CreateButton $isCollapsed={isCollapsed} onClick={() => setIsCreatePortfolioModalOpen(true)}>
-            <PlusIcon>+</PlusIcon>
+        <PlusIcon>+</PlusIcon>
             {!isCollapsed && 'Create portfolio'}
           </CreateButton>
           {isCollapsed && (
             <Tooltip>
-              Create portfolio
+        Create portfolio
             </Tooltip>
           )}
         </TooltipContainer>

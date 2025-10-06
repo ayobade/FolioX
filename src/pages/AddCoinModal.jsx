@@ -122,7 +122,7 @@ const CoinName = styled.span`
 
 const CoinPrice = styled.span`
   font-size: 16px;
-  color: #10b981;
+  color: #111827;
   font-weight: 500;
 `;
 
@@ -174,7 +174,7 @@ const CancelBtn = styled.button`
 `;
 
 const AddBtn = styled.button`
-  background-color: #10b981;
+  background-color: #111827;
   color: #ffffff;
   border: none;
   padding: 12px 24px;
@@ -182,6 +182,10 @@ const AddBtn = styled.button`
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
+  transition: all 0.2s;
+  &:hover {
+    background-color: #0f172a;
+  }
 `;
 
 const Segments = styled.div`
@@ -253,9 +257,13 @@ const DayCell = styled.button`
   height: 36px;
   border-radius: 10px;
   border: none;
-  background: ${(p) => (p.$selected ? '#3b82f6' : '#f9fafb')};
+  background: ${(p) => (p.$selected ? '#111827' : '#f9fafb')};
   color: ${(p) => (p.$selected ? '#ffffff' : '#374151')};
   cursor: pointer;
+  transition: all 0.2s;
+  &:hover {
+    background: ${(p) => (p.$selected ? '#0f172a' : '#e5e7eb')};
+  }
 `;
 
 const TimeRow = styled.div`
@@ -276,13 +284,17 @@ const TimeInput = styled.input`
 const ApplyBtn = styled.button`
   width: 100%;
   margin-top: 14px;
-  background: #3b82f6;
+  background: #111827;
   color: #ffffff;
   border: none;
   padding: 12px 16px;
   border-radius: 10px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s;
+  &:hover {
+    background-color: #0f172a;
+  }
 `;
 
 const ScreenHeader = styled.div`
@@ -322,7 +334,15 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
     const [transferDirection, setTransferDirection] = useState('Transfer In')
 
     useEffect(() => {
-        if (isOpen) setScreen('form')
+        if (isOpen) {
+            const now = new Date()
+            setScreen('form')
+            setDatePurchased(now.toISOString())
+            setPickerYear(now.getFullYear())
+            setPickerMonth(now.getMonth())
+            setPickerDay(now.getDate())
+            setPickerTime(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)
+        }
     }, [isOpen])
 
     const [coinsList, setCoinsList] = useState([])
@@ -335,28 +355,61 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
 
     useEffect(() => {
         if (selectedCoinData && !price) {
-            // Don't auto-fill current price - user should enter historical price
-            // setPrice(String(selectedCoinData.price ?? selectedCoinData.current_price ?? ''))
+            setPrice(String(selectedCoinData.price ?? selectedCoinData.current_price ?? ''))
         }
     }, [selectedCoinData, price])
 
-    // Fetch historical price when coin and date are selected
     useEffect(() => {
-        if (!selectedCoinData || !datePurchased) return
+        if (!selectedCoinData || !datePurchased) {
+            if (selectedCoinData) {
+                setPrice(String(selectedCoinData.price ?? selectedCoinData.current_price ?? ''))
+            }
+            return
+        }
         
         const fetchHistoricalPrice = async () => {
             try {
                 const coinId = selectedCoinData.id
                 const purchaseDate = new Date(datePurchased)
+                const today = new Date()
                 
-                // Try to get historical price for the specific date
-                const url = `/cg/api/v3/coins/${coinId}/history?date=${purchaseDate.toISOString().split('T')[0]}`
-                console.log('Fetching historical price for', coinId, 'on', purchaseDate.toISOString().split('T')[0])
+                if (purchaseDate > today || (today - purchaseDate) < 24 * 60 * 60 * 1000) {
+                    setPrice(String(selectedCoinData.price ?? selectedCoinData.current_price ?? ''))
+                    return
+                }
+                
+                const formattedDate = purchaseDate.toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                }).replace(/\//g, '-')
+
+                const cacheKey = `cg_history_${coinId}_${formattedDate}`
+                const cached = localStorage.getItem(cacheKey)
+                if (cached) {
+                    const cachedPrice = Number(cached)
+                    if (!Number.isNaN(cachedPrice) && cachedPrice > 0) {
+                        setPrice(String(cachedPrice))
+                        return
+                    }
+                }
+
+                if (!window.__cgHistoryInflight) {
+                    window.__cgHistoryInflight = new Set()
+                }
+                const inflightKey = `${coinId}_${formattedDate}`
+                if (window.__cgHistoryInflight.has(inflightKey)) {
+                    return
+                }
+                window.__cgHistoryInflight.add(inflightKey)
+                
+                const url = `https://api.coingecko.com/api/v3/coins/${coinId}/history?date=${formattedDate}`
                 
                 const res = await fetch(url, {
                     headers: {
                         'Accept': 'application/json',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
                     }
                 })
                 
@@ -364,24 +417,23 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                     const data = await res.json()
                     const historicalPrice = data.market_data?.current_price?.usd
                     if (historicalPrice) {
-                        console.log('Found historical price:', historicalPrice)
+                        localStorage.setItem(cacheKey, String(historicalPrice))
                         setPrice(String(historicalPrice))
                     } else {
-                        console.log('No historical price found, using current price as fallback')
                         setPrice(String(selectedCoinData.price ?? selectedCoinData.current_price ?? ''))
                     }
                 } else {
-                    console.log('Failed to fetch historical price, using current price as fallback')
                     setPrice(String(selectedCoinData.price ?? selectedCoinData.current_price ?? ''))
                 }
+
+                window.__cgHistoryInflight.delete(inflightKey)
             } catch (error) {
-                console.log('Error fetching historical price:', error)
                 setPrice(String(selectedCoinData.price ?? selectedCoinData.current_price ?? ''))
             }
         }
         
         fetchHistoricalPrice()
-    }, [selectedCoinData, datePurchased]) // This will trigger whenever datePurchased changes
+    }, [selectedCoinData, datePurchased])
 
     useEffect(() => {
         if (!isOpen) return
@@ -393,7 +445,8 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                   signal: controller.signal,
                   headers: {
                     'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
                   }
                 })
                 if (!res.ok) return
@@ -417,7 +470,8 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                   signal: controller.signal,
                   headers: {
                     'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
                   }
                 })
                 if (!sRes.ok) return
@@ -429,7 +483,8 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                   signal: controller.signal,
                   headers: {
                     'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
                   }
                 })
                 if (!pRes.ok) return
@@ -468,13 +523,29 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
         setSelectedCoin('')
         setAmount('')
         setPrice('')
-        setDatePurchased(new Date().toISOString().split('T')[0])
+        const now = new Date()
+        setDatePurchased(now.toISOString())
+        setPickerYear(now.getFullYear())
+        setPickerMonth(now.getMonth())
+        setPickerDay(now.getDate())
+        setPickerTime(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)
         setSearchTerm('')
         setShowDropdown(false)
         setSelectedCoinObj(null)
         setSelectedCoinId('')
         onClose()
     }
+
+    useEffect(() => {
+        if (txType === 'Sell') {
+            const now = new Date()
+            setDatePurchased(now.toISOString())
+            setPickerYear(now.getFullYear())
+            setPickerMonth(now.getMonth())
+            setPickerDay(now.getDate())
+            setPickerTime(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)
+        }
+    }, [txType])
 
     useEffect(() => {
         if (!isOpen) return
@@ -576,11 +647,16 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                             <Input
                                 type="number"
                                 step="0.01"
-                                placeholder="Auto-filled from historical data"
+                                placeholder={datePurchased ? "Auto-filled from historical data" : "Enter price manually"}
                                 value={price}
                                 onChange={(e) => setPrice(e.target.value)}
                                 required
                             />
+                            {datePurchased && (
+                                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                                    Price from {new Date(datePurchased).toLocaleDateString()}
+                                </div>
+                            )}
                         </FieldGroup>
 
                         <Preview>
