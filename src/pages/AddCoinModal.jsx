@@ -104,6 +104,14 @@ const DropdownItem = styled.div`
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #f3f4f6;
+  gap: 12px;
+`
+
+const CoinLogo = styled.img`
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
 `;
 
 const CoinSymbol = styled.span`
@@ -313,7 +321,7 @@ const BackBtn = styled.button`
   color: #374151;
 `;
 
-function AddCoinModal({ isOpen, onClose, onAddCoin }) {
+function AddCoinModal({ isOpen, onClose, onAddCoin, preSelectedCoin }) {
     const [selectedCoin, setSelectedCoin] = useState('')
     const [selectedCoinId, setSelectedCoinId] = useState('')
     const [selectedCoinObj, setSelectedCoinObj] = useState(null)
@@ -342,8 +350,15 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
             setPickerMonth(now.getMonth())
             setPickerDay(now.getDate())
             setPickerTime(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)
+            
+            if (preSelectedCoin) {
+                setSelectedCoin(preSelectedCoin.symbol)
+                setSelectedCoinId(preSelectedCoin.id)
+                setSelectedCoinObj(preSelectedCoin)
+                setSearchTerm(`${preSelectedCoin.name} (${preSelectedCoin.symbol})`)
+            }
         }
-    }, [isOpen])
+    }, [isOpen, preSelectedCoin])
 
     const [coinsList, setCoinsList] = useState([])
     const filteredCoins = coinsList.filter(coin => 
@@ -451,7 +466,7 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                 })
                 if (!res.ok) return
                 const data = await res.json()
-                const mapped = data.map((d) => ({ id: d.id, symbol: (d.symbol || '').toUpperCase(), name: d.name, price: d.current_price }))
+                const mapped = data.map((d) => ({ id: d.id, symbol: (d.symbol || '').toUpperCase(), name: d.name, price: d.current_price, image: d.image }))
                 setCoinsList(mapped)
             } catch {}
         }
@@ -489,7 +504,7 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                 })
                 if (!pRes.ok) return
                 const prices = await pRes.json()
-                setCoinsList(coins.map((c) => ({ id: c.id, symbol: (c.symbol || '').toUpperCase(), name: c.name, price: prices[c.id]?.usd ?? null })))
+                setCoinsList(coins.map((c) => ({ id: c.id, symbol: (c.symbol || '').toUpperCase(), name: c.name, price: prices[c.id]?.usd ?? null, image: c.large || c.small || c.thumb })))
             } catch {}
         }, 250)
         return () => { clearTimeout(timeout); controller.abort() }
@@ -613,6 +628,7 @@ function AddCoinModal({ isOpen, onClose, onAddCoin }) {
                                                     setShowDropdown(false)
                                                 }}
                                             >
+                                                {coin.image && <CoinLogo src={coin.image} alt={coin.name} />}
                                                 <CoinSymbol>{coin.symbol}</CoinSymbol>
                                                 <CoinName>{coin.name}</CoinName>
                                                 <CoinPrice>{coin.price != null ? `$${Number(coin.price).toLocaleString()}` : '--'}</CoinPrice>

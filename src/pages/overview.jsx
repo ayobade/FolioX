@@ -24,8 +24,14 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
     const [isAddCoinModalOpen, setIsAddCoinModalOpen] = useState(false)
     const [currentTime, setCurrentTime] = useState(Date.now())
     const [selectedTimeframe, setSelectedTimeframe] = useState('all')
+    const [searchTerm, setSearchTerm] = useState('')
+    const [searchResults, setSearchResults] = useState([])
+    const [showSearchDropdown, setShowSearchDropdown] = useState(false)
+    const [selectedCoinFromSearch, setSelectedCoinFromSearch] = useState(null)
     
     const { priceData, fetchPrices, fetchHistoricalData, getFilteredHistoricalData, symbolToCoinId } = usePrice()
+    
+    const [coinLogos, setCoinLogos] = useState({})
 
     const assetSymbols = useMemo(() => (activePortfolio?.assets?.map(a => a.symbol) || []), [activePortfolio?.assets])
     const assetSymbolsKey = useMemo(() => assetSymbols.join(','), [assetSymbols])
@@ -39,6 +45,17 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
     }, [])
 
     useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showSearchDropdown && !event.target.closest('[data-search-container]')) {
+                setShowSearchDropdown(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [showSearchDropdown])
+
+    useEffect(() => {
         if (!assetSymbols.length) return
         fetchPrices(assetSymbols)
     }, [assetSymbolsKey])
@@ -47,6 +64,78 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
         if (!assetSymbols.length) return
         fetchHistoricalData(assetSymbols, 90)
     }, [assetSymbolsKey])
+
+    useEffect(() => {
+        if (!searchTerm.trim()) {
+            setSearchResults([])
+            setShowSearchDropdown(false)
+            return
+        }
+
+        const searchCoins = async () => {
+            try {
+                const response = await fetch(
+                    `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(searchTerm)}`,
+                    {
+                        headers: {
+                            'Accept': 'application/json',
+                            'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
+                        }
+                    }
+                )
+                
+                if (response.ok) {
+                    const data = await response.json()
+                    const coins = (data.coins || []).slice(0, 10)
+                    const coinsWithLogos = coins.map(coin => ({
+                        ...coin,
+                        logo: coin.large || coin.small || coin.thumb
+                    }))
+                    setSearchResults(coinsWithLogos)
+                    setShowSearchDropdown(true)
+                }
+            } catch (error) {
+                setSearchResults([])
+            }
+        }
+
+        const timeoutId = setTimeout(searchCoins, 300)
+        return () => clearTimeout(timeoutId)
+    }, [searchTerm])
+
+    useEffect(() => {
+        const fetchCoinLogos = async () => {
+            if (!activePortfolio?.assets?.length) return
+            
+            const symbols = activePortfolio.assets.map(asset => asset.symbol.toLowerCase())
+            const coinIds = symbols.map(symbol => symbolToCoinId[symbol] || symbol)
+            
+            try {
+                const response = await fetch(
+                    `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coinIds.join(',')}&order=market_cap_desc&per_page=100&page=1&sparkline=false`,
+                    {
+                        headers: {
+                            'Accept': 'application/json',
+                            'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
+                        }
+                    }
+                )
+                
+                if (response.ok) {
+                    const data = await response.json()
+                    const logos = {}
+                    data.forEach(coin => {
+                        logos[coin.symbol.toUpperCase()] = coin.image
+                    })
+                    setCoinLogos(logos)
+                }
+            } catch (error) {
+                console.error('Error fetching coin logos:', error)
+            }
+        }
+        
+        fetchCoinLogos()
+    }, [activePortfolio?.assets, symbolToCoinId])
 
     const formatRelativeTime = (timestamp) => {
         const diff = currentTime - timestamp
@@ -370,14 +459,45 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                             <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                     </NotificationIcon>
-                    <SearchBar>
+                    <SearchBar data-search-container>
                         <SearchIcon>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
                                 <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                         </SearchIcon>
-                        <SearchInput placeholder="Search" />
+                        <SearchInput 
+                            placeholder="Search coins..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onFocus={() => setShowSearchDropdown(true)}
+                        />
+                        {showSearchDropdown && searchResults.length > 0 && (
+                            <SearchDropdown>
+                                {searchResults.map((coin) => (
+                                    <SearchResultItem 
+                                        key={coin.id}
+                                        onClick={() => {
+                                            setSelectedCoinFromSearch({
+                                                id: coin.id,
+                                                symbol: coin.symbol.toUpperCase(),
+                                                name: coin.name,
+                                                image: coin.logo
+                                            })
+                                            setSearchTerm('')
+                                            setShowSearchDropdown(false)
+                                            setIsAddCoinModalOpen(true)
+                                        }}
+                                    >
+                                        <CoinLogo src={coin.logo} alt={coin.name} />
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: 14 }}>{coin.name}</div>
+                                            <div style={{ color: '#6b7280', fontSize: 12 }}>{coin.symbol.toUpperCase()}</div>
+                                        </div>
+                                    </SearchResultItem>
+                                ))}
+                            </SearchDropdown>
+                        )}
                     </SearchBar>
                     <AddTransactionButton onClick={() => setIsAddCoinModalOpen(true)}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -518,7 +638,7 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                         <StatIcon $color="#ef4444">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
+                                        </svg>
                         </StatIcon>
                         <StatContent>
                             <StatValue>{activePortfolio?.assets?.length || 0}</StatValue>
@@ -588,7 +708,7 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                                             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                 <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                                 <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                        </svg>
+                            </svg>
                                         </ChartIcon>
                                         <ChartText>No performance data available</ChartText>
                                     </ChartPlaceholder>
@@ -655,7 +775,11 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                                     <AllocationLegend>
                                         {allocation.map((a) => (
                                             <LegendItem key={a.symbol}>
-                                                <LegendColor $color={a.color}></LegendColor>
+                                                {coinLogos[a.symbol] ? (
+                                                    <CoinLogo src={coinLogos[a.symbol]} alt={a.symbol} style={{ width: '16px', height: '16px' }} />
+                                                ) : (
+                                                    <LegendColor $color={a.color}></LegendColor>
+                                                )}
                                                 <LegendInfo>
                                                     <LegendName>{a.symbol}</LegendName>
                                                     <LegendValue>{a.percent.toFixed(2)}%</LegendValue>
@@ -712,7 +836,11 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                             return (
                                 <AssetsRow key={asset.id || asset.symbol || asset.name || idx}>
                                     <CoinCell>
-                                        <CoinAvatar>{asset.symbol.charAt(0)}</CoinAvatar>
+                                        {coinLogos[asset.symbol] ? (
+                                            <CoinLogo src={coinLogos[asset.symbol]} alt={asset.name} />
+                                        ) : (
+                                            <CoinAvatar>{asset.symbol.charAt(0)}</CoinAvatar>
+                                        )}
                                         <div>
                                             <div style={{ fontWeight: 600 }}>{asset.name}</div>
                                             <div style={{ color: '#6b7280', fontSize: 14 }}>{asset.symbol}</div>
@@ -803,8 +931,12 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
         
         <AddCoinModal 
             isOpen={isAddCoinModalOpen}
-            onClose={() => setIsAddCoinModalOpen(false)}
+            onClose={() => {
+                setIsAddCoinModalOpen(false)
+                setSelectedCoinFromSearch(null)
+            }}
             onAddCoin={onAddCoin}
+            preSelectedCoin={selectedCoinFromSearch}
         />
          </>
     )
@@ -996,6 +1128,46 @@ const SearchInput = styled.input`
     &::placeholder {
         color: #94a3b8;
     }
+`
+
+const SearchDropdown = styled.div`
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 4px;
+`
+
+const SearchResultItem = styled.div`
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #f3f4f6;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    
+    &:hover {
+        background-color: #f9fafb;
+    }
+    
+    &:last-child {
+        border-bottom: none;
+    }
+`
+
+const CoinLogo = styled.img`
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
 `
 
 const AddTransactionButton = styled.button`
