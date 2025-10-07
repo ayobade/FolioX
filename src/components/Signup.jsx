@@ -42,7 +42,7 @@ function Signup() {
             const cred = await createUserWithEmailAndPassword(auth, email, password)
             if (cred?.user) {
                 await sendEmailVerification(cred.user, {
-                    url: 'http://localhost:5173/login',
+                    url: 'https://foliox.netlify.app/login',
                 })
             }
             setShowSuccess(true)
@@ -151,7 +151,6 @@ function Signup() {
                                 <Checkbox type="checkbox" id="remember" />
                                 <Label htmlFor="remember">Remember me</Label>
                             </CheckboxGroup>
-                            <ForgotLink href="#">Forgot password?</ForgotLink>
                         </Options>
 
                         <SubmitButton type="submit">
