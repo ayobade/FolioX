@@ -1,13 +1,13 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
-import { auth } from '../firebase.js'
+import { auth } from '../firebase'
 import { signOut } from 'firebase/auth'
 import { useNavigate } from 'react-router-dom'
 import logo from '/Logoblack.png'
 import logoIcon from '/Logoicon.png'
-import CreatePortfolioModal from './CreatePortfolioModal.jsx'
-import { usePrice } from '../contexts/PriceProvider.jsx'
-import { usePortfolio } from '../contexts/PortfolioContext.jsx'
+import CreatePortfolioModal from './CreatePortfolioModal'
+import { usePrice } from '../contexts/PriceProvider'
+import { usePortfolio } from '../contexts/PortfolioContext'
 
 const SidebarContainer = styled.div`
   width: ${props => props.$isCollapsed ? '80px' : '300px'};

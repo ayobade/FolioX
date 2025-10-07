@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react'
-import { db } from '../firebase.js'
-import { useAuth } from './AuthContext.jsx'
+import { db } from '../firebase'
+import { useAuth } from './AuthContext'
 import { doc, setDoc, getDoc, collection, addDoc, serverTimestamp, getDocs, query, orderBy, deleteDoc } from 'firebase/firestore'
-import { saveToLocal, getFromLocal } from '../utils/storage.js'
+import { saveToLocal, getFromLocal } from '../utils/storage'
 
 const PortfolioContext = createContext(null)
 
