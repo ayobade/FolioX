@@ -5,3 +5,9 @@
 [build.environment]
   NODE_VERSION = "22.8.0"
   NPM_FLAGS = "--legacy-peer-deps"
+
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
