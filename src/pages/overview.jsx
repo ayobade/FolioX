@@ -13,8 +13,8 @@ import {
   Legend as ChartLegend
 } from 'chart.js'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
-import AddCoinModal from './AddCoinModal'
-import { usePrice } from '../contexts/PriceProvider'
+import AddCoinModal from './AddCoinModal.jsx'
+import { usePrice } from '../contexts/PriceProvider.jsx'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Filler, Tooltip, ChartLegend)
 

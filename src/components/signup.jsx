@@ -3,7 +3,7 @@ import styled from 'styled-components'
 import bg from '/bg.png'
 import { Link } from 'react-router-dom'
 import logo from '/Logoblack.png'
-import { auth } from '../firebase'
+import { auth } from '../firebase.js'
 import { createUserWithEmailAndPassword, sendEmailVerification, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { useNavigate } from 'react-router-dom'
 

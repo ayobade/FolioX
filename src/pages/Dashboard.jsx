@@ -1,8 +1,8 @@
-import { usePortfolio } from '../contexts/PortfolioContext'
+import { usePortfolio } from '../contexts/PortfolioContext.jsx'
 import React, { useState } from 'react'
-import Sidebar from './Sidebar'
-import Overview from './overview'
-import { PriceProvider } from '../contexts/PriceProvider'
+import Sidebar from './Sidebar.jsx'
+import Overview from './Overview.jsx'
+import { PriceProvider } from '../contexts/PriceProvider.jsx'
 
 function Dashboard() {
     const [isCollapsed, setIsCollapsed] = useState(false)
