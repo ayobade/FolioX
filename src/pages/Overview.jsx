@@ -1609,6 +1609,13 @@ const AssetsTable = styled.div`
     border: 1px solid #e2e8f0;
     border-radius: 12px;
     overflow: hidden;
+    @media (max-width: 768px) {
+
+    overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        max-width: 80vw;
+    }
 `
 
 const AssetsRow = styled.div`
@@ -1623,9 +1630,10 @@ const AssetsRow = styled.div`
     color: ${props => props.$header ? '#6b7280' : '#111827'};
     
     @media (max-width: 768px) {
-        grid-template-columns: 1fr;
+        grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 0.8fr;
         gap: 8px;
         padding: 16px;
+        min-width: 640px;
         
         &:not(:first-child) {
             border-top: 1px solid #e2e8f0;
