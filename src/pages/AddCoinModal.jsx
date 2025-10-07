@@ -455,7 +455,7 @@ function AddCoinModal({ isOpen, onClose, onAddCoin, preSelectedCoin }) {
         const controller = new AbortController()
         const load = async () => {
             try {
-                const url = `/cg/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false`
+                const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false`
                 const res = await fetch(url, { 
                   signal: controller.signal,
                   headers: {
@@ -481,7 +481,7 @@ function AddCoinModal({ isOpen, onClose, onAddCoin, preSelectedCoin }) {
             try {
                 const q = searchTerm.trim()
                 if (!q) return
-                const sRes = await fetch(`/cg/api/v3/search?query=${encodeURIComponent(q)}` , { 
+                const sRes = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}` , { 
                   signal: controller.signal,
                   headers: {
                     'Accept': 'application/json',
@@ -494,7 +494,7 @@ function AddCoinModal({ isOpen, onClose, onAddCoin, preSelectedCoin }) {
                 const coins = (sJson.coins || []).slice(0, 25)
                 const ids = coins.map((c) => c.id)
                 if (!ids.length) { setCoinsList([]); return }
-                const pRes = await fetch(`/cg/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`, { 
+                const pRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`, { 
                   signal: controller.signal,
                   headers: {
                     'Accept': 'application/json',
