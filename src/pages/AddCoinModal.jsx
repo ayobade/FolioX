@@ -614,6 +614,54 @@ function AddCoinModal({ isOpen, onClose, onAddCoin, preSelectedCoin }) {
                                         setShowDropdown(true)
                                     }}
                                     onFocus={() => setShowDropdown(true)}
+                                    onKeyDown={async (e) => {
+                                        if (e.key !== 'Enter') return
+                                        e.preventDefault()
+                                        if (filteredCoins.length > 0) {
+                                            const coin = filteredCoins[0]
+                                            setSelectedCoin(coin.symbol)
+                                            setSelectedCoinId(coin.id || '')
+                                            setSelectedCoinObj(coin)
+                                            setSearchTerm(`${coin.name} (${coin.symbol})`)
+                                            setShowDropdown(false)
+                                            return
+                                        }
+                                        const q = searchTerm.trim()
+                                        if (!q) return
+                                        try {
+                                            const sRes = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`, {
+                                                headers: {
+                                                    'Accept': 'application/json',
+                                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                                    'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
+                                                }
+                                            })
+                                            if (!sRes.ok) return
+                                            const sJson = await sRes.json()
+                                            const coins = (sJson.coins || [])
+                                            if (!coins.length) return
+                                            const first = coins[0]
+                                            const pRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${first.id}&vs_currencies=usd`, {
+                                                headers: {
+                                                    'Accept': 'application/json',
+                                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                                    'x-cg-demo-api-key': import.meta.env.VITE_COINGECKO_API_KEY
+                                                }
+                                            })
+                                            let priceUsd = null
+                                            if (pRes.ok) {
+                                                const prices = await pRes.json()
+                                                priceUsd = prices[first.id]?.usd ?? null
+                                            }
+                                            const coinObj = { id: first.id, symbol: (first.symbol || '').toUpperCase(), name: first.name, price: priceUsd, image: first.large || first.small || first.thumb }
+                                            setCoinsList([coinObj])
+                                            setSelectedCoin(coinObj.symbol)
+                                            setSelectedCoinId(coinObj.id)
+                                            setSelectedCoinObj(coinObj)
+                                            setSearchTerm(`${coinObj.name} (${coinObj.symbol})`)
+                                            setShowDropdown(false)
+                                        } catch {}
+                                    }}
                                 />
                                 {showDropdown && (
                                     <Dropdown>

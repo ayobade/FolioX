@@ -550,7 +550,7 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                             <StatValue>
                                 {(() => {
                                     const { allTimeProfit } = performance
-                                    return `$${allTimeProfit.toFixed(0)}`
+                                    return allTimeProfit >= 0 ? `+$${allTimeProfit.toFixed(0)}` : `$${allTimeProfit.toFixed(0)}`
                                 })()}
                             </StatValue>
                             <StatLabel>All-Time Profit & Loss (PnL)</StatLabel>
@@ -592,7 +592,9 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                                         }
                                     })
                                     
-                                    return total24hChange >= 0 ? `+$${total24hChange.toFixed(0)}` : `$${total24hChange.toFixed(0)}`
+                                    return total24hChange >= 0 
+                                        ? `+$${total24hChange.toFixed(0)}` 
+                                        : `-$${Math.abs(total24hChange).toFixed(0)}`
                                 })()}
                             </StatValue>
                             <StatLabel>24h Change</StatLabel>
@@ -695,7 +697,7 @@ function Overview({ isCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, activePo
                         <SectionHeader>
                             <SectionTitle>Performance</SectionTitle>
                             <TimeFrameSelector>
-                                <TimeFrame $active={selectedTimeframe === 'all'} onClick={() => setSelectedTimeframe('all')}>All</TimeFrame>
+                                <TimeFrame $active={selectedTimeframe === 'all'} onClick={() => setSelectedTimeframe('all')}>All Time</TimeFrame>
                             </TimeFrameSelector>
                         </SectionHeader>
                         {(() => {
